@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using OpenAI.Chat;
+using SampleOpenAIApp.Clients;
 using Tutorial01B.Clients;
+using Tutorial01B.Services;
 
 namespace Tutorial01B.Services;
 
@@ -27,20 +29,17 @@ public sealed class ChatService : IChatService
             new UserChatMessage("What's the best way to train a parrot?")
         ];
 
-        ChatCompletion completion = await _executor.CompleteAsync(messages, cancellationToken);
+        ChatResult result = await _executor.CompleteAsync(messages, cancellationToken);
 
-        _logger.LogInformation("Model={Model}", completion.Model);
-        _logger.LogInformation("Chat Role={Role}", completion.Role);
+        _logger.LogInformation("Model={Model}", result.Model);
+        _logger.LogInformation("Chat Role={Role}", result.Role);
 
-        foreach (ChatMessageContentPart contentPart in completion.Content)
+        if (!string.IsNullOrWhiteSpace(result.Text))
         {
-            if (!string.IsNullOrWhiteSpace(contentPart.Text))
-            {
-                Console.WriteLine("Message:");
-                Console.WriteLine(contentPart.Text);
-            }
+            Console.WriteLine("Message:");
+            Console.WriteLine(result.Text);
         }
 
-        _logger.LogInformation("Finish Reason={FinishReason}", completion.FinishReason);
+        _logger.LogInformation("Finish Reason={FinishReason}", result.FinishReason);
     }
 }

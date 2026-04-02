@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="afsample01/afsample01.csproj" />
   <Project Path="Cline01/Cline01.csproj" Id="da8ce98e-2e72-48c2-8043-c1af01980578" />
+  <Project Path="Tests/Tutorial01B.Tests/Tutorial01B.Tests.csproj" />
   <Project Path="Tutorial01/Tutorial01.csproj" Id="92555176-9cd8-4a14-8f65-7d46f69214c0" />
   <Project Path="Tutorial01B/Tutorial01B.csproj" Id="23f08864-27d7-49cb-b156-99a514c85655" />
 </Solution>

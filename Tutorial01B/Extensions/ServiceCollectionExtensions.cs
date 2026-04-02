@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using OpenAI;
 using OpenAI.Chat;
-
+using SampleOpenAIApp.Clients;
 using Tutorial01B.Clients;
 using Tutorial01B.Models;
 using Tutorial01B.Services;
