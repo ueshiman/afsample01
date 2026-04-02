@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "agents": [
+    {
+      "agentId": "compliance-agent",
+      "agentName": "ComplianceAgent",
+      "enabled": true,
+      "systemPrompt": "あなたはコンプライアンス評価エージェントです。会話文を評価し、問題の可能性がある表現をJSONで返してください。以下の形式で返してください: {\"status\": \"ok/warning/danger\", \"reason\": \"理由\"}",
+      "model": {
+        "deployment": "gpt-4o-mini",
+        "temperature": 0.2,
+        "maxTokens": 1000
+      },
+      "timeoutSeconds": 15,
+      "outputFormat": "json"
+    },
+    {
+      "agentId": "sentiment-agent",
+      "agentName": "SentimentAgent",
+      "enabled": true,
+      "systemPrompt": "あなたは感情分析エージェントです。会話文の感情を分析し、JSONで返してください。以下の形式で返してください: {\"sentiment\": \"positive/neutral/negative\", \"confidence\": 0.95}",
+      "model": {
+        "deployment": "gpt-4o-mini",
+        "temperature": 0.2,
+        "maxTokens": 500
+      },
+      "timeoutSeconds": 10,
+      "outputFormat": "json"
+    },
+    {
+      "agentId": "quality-agent",
+      "agentName": "QualityAgent",
+      "enabled": false,
+      "systemPrompt": "あなたは会話品質評価エージェントです。会話の質を評価し、JSONで返してください。以下の形式で返してください: {\"quality\": \"high/medium/low\", \"score\": 8.5}",
+      "model": {
+        "deployment": "gpt-4o-mini",
+        "temperature": 0.3,
+        "maxTokens": 800
+      },
+      "timeoutSeconds": 15,
+      "outputFormat": "json"
+    }
+  ]
+}
