@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using OpenAI;
 using OpenAI.Chat;
 using SampleOpenAIApp.Clients;
+using Tutorial01B.Agents;
 using Tutorial01B.Clients;
 using Tutorial01B.Models;
 using Tutorial01B.Services;
@@ -52,7 +53,33 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddSingleton<IChatCompletionExecutor, OpenAIChatCompletionExecutor>();
-        services.AddSingleton<IChatService, ChatService>();
+        services.AddSingleton<ChatService>();
+
+        services.AddMultiAgentSystem(configuration);
+
+        return services;
+    }
+
+    public static IServiceCollection AddMultiAgentSystem(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var agentSettings = configuration
+            .GetSection(AgentSettings.SectionName)
+            .Get<AgentSettings>() ?? new AgentSettings();
+
+        bool IsEnabled(string agentName) =>
+            agentSettings.Enabled.Count == 0 ||
+            agentSettings.Enabled.Contains(agentName, StringComparer.OrdinalIgnoreCase);
+
+        if (IsEnabled(nameof(SummaryAgent)))
+            services.AddSingleton<IAgent, SummaryAgent>();
+
+        if (IsEnabled(nameof(TranslationAgent)))
+            services.AddSingleton<IAgent, TranslationAgent>();
+
+        services.AddSingleton<AgentOrchestrator>();
+        services.AddSingleton<IChatService, MultiAgentChatService>();
 
         return services;
     }
