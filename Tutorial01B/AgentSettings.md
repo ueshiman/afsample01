@@ -55,101 +55,6 @@
 
 ```json
 {
-  "version": "0.1",
-  "service": {
-    "name": "ConversationSuggestionService",
-    "defaultLocale": "ja-JP",
-    "defaultTimeoutSeconds": 30
-  },
-  "providers": [
-    {
-      "id": "aoai-main",
-      "type": "AzureOpenAI",
-      "endpoint": "https://your-resource.openai.azure.com",
-      "authentication": {
-        "type": "AccessToken"
-      },
-      "defaults": {
-        "temperature": 0.2,
-        "maxOutputTokens": 2000
-      }
-    }
-  ],
-  "callbacks": [
-    {
-      "id": "default",
-      "type": "webhook",
-      "url": "https://example.com/api/agent-callback",
-      "includeConversation": true,
-      "includeAgentMetadata": true
-    }
-  ],
-  "execution": {
-    "mode": "parallel",
-    "returnMode": "perAgent",
-    "maxDegreeOfParallelism": 3
-  },
-  "agents": [
-    {
-      "id": "compliance-checker",
-      "name": "Compliance Checker",
-      "enabled": true,
-      "type": "policy-check",
-      "providerRef": "aoai-main",
-      "deployment": "gpt-4o-mini",
-      "callbackRef": "default",
-      "priority": 100,
-      "timeoutSeconds": 15,
-      "prompt": {
-        "system": "あなたは会話監視エージェントです。会話文から、法令違反、ハラスメント、不適切表現、個人情報漏えい、社内規程違反の可能性を抽出してください。"
-      },
-      "input": {
-        "source": "conversation",
-        "format": "plainText",
-        "maxTurns": 20
-      },
-      "output": {
-        "format": "json",
-        "schemaName": "ComplianceResult"
-      },
-      "settings": {
-        "temperature": 0.1,
-        "maxOutputTokens": 1000
-      }
-    },
-    {
-      "id": "reference-suggester",
-      "name": "Reference Suggester",
-      "enabled": true,
-      "type": "suggestion",
-      "providerRef": "aoai-main",
-      "deployment": "gpt-4.1-mini",
-      "callbackRef": "default",
-      "priority": 50,
-      "timeoutSeconds": 20,
-      "prompt": {
-        "system": "あなたは会話支援エージェントです。会話内容を読み取り、参考情報、確認事項、次のアクション候補を簡潔に提案してください。"
-      },
-      "input": {
-        "source": "conversation",
-        "format": "plainText",
-        "maxTurns": 20
-      },
-      "output": {
-        "format": "json",
-        "schemaName": "SuggestionResult"
-      },
-      "settings": {
-        "temperature": 0.3,
-        "maxOutputTokens": 1200
-      }
-    }
-  ]
-}
-```
-
-```
-{
   // 設定ファイルのバージョン
   "version": "0.1",
 
@@ -166,7 +71,6 @@
   },
 
   // LLM 接続先の定義一覧
-  // 今は Azure OpenAI を前提としている
   "providers": [
     {
       // provider の識別子
@@ -177,7 +81,6 @@
       "type": "AzureOpenAI",
 
       // Azure OpenAI の resource endpoint
-      // Project endpoint ではなく resource endpoint
       "endpoint": "https://your-resource.openai.azure.com",
 
       // 認証設定
@@ -195,7 +98,10 @@
 
         // 既定最大出力トークン数
         "maxOutputTokens": 2000
-      }
+      },
+
+      // ログ送信先 endpoint
+      "logging": "https://example.com/api/agent-log"
     }
   ],
 
@@ -250,7 +156,6 @@
       "enabled": true,
 
       // agent 種別
-      // 実装側で分岐やロギングに使える
       "type": "policy-check",
 
       // 利用する provider
@@ -258,7 +163,6 @@
       "providerRef": "aoai-main",
 
       // 利用する Azure OpenAI deployment 名
-      // provider ではなく agent 側で持つ
       "deployment": "gpt-4o-mini",
 
       // 結果の返却先
@@ -266,7 +170,6 @@
       "callbackRef": "default",
 
       // 実行優先度
-      // 数字が大きいものを優先する運用を想定
       "priority": 100,
 
       // この agent 個別の timeout 秒数
@@ -281,7 +184,6 @@
       // この agent が受け取る入力の定義
       "input": {
         // 入力元
-        // 今は conversation 固定に近い想定
         "source": "conversation",
 
         // 入力形式
@@ -297,7 +199,6 @@
         "format": "json",
 
         // 期待する出力スキーマ名
-        // 実装側で DTO マッピングや検証に利用可能
         "schemaName": "ComplianceResult"
       },
 
@@ -376,90 +277,5 @@
     }
   ]
 }
-```
-
-
-
----
-
-## この形の読み方
-
-### 1. provider
-
-```json
-{
-  "id": "aoai-main",
-  "type": "AzureOpenAI",
-  "endpoint": "https://your-resource.openai.azure.com"
-}
-```
-
-これは
-**「どこに接続するか」**
-だけを表します。
-
----
-
-### 2. agent
-
-```json
-{
-  "id": "compliance-checker",
-  "providerRef": "aoai-main",
-  "deployment": "gpt-4o-mini"
-}
-```
-
-これは
-**「どの接続先を使い、どの deployment で動かすか」**
-を表します。
-
----
-
-### 3. callback
-
-```json
-{
-  "id": "default",
-  "type": "webhook",
-  "url": "https://example.com/api/agent-callback"
-}
-```
-
-これは
-**「結果をどこへ返すか」**
-です。
-
----
-
-## 今の段階で入れないもの
-
-今は入れなくてよいです。
-
-* project
-* foundry 固有設定
-* agent 間の複雑な依存関係
-* ツール定義
-* RAG 定義
-* 条件分岐 DSL
-
-最初は **単純に JSON を読み、agent を並列実行する** ところまでで十分です。
-
----
-
-## 実装の流れ
-
-C# 側ではこうなります。
-
-1. JSON を読む
-2. `providers` を辞書化
-3. `callbacks` を辞書化
-4. `enabled == true` の agents を取得
-5. `providerRef` から接続先を解決
-6. `deployment` を指定して実行
-7. 結果を webhook に返す
-
-かなり素直です。
-
 ---
 
