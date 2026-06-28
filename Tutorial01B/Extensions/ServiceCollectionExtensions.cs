@@ -1,4 +1,5 @@
 using System.ClientModel;
+using ConversationSuggestionService.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -95,6 +96,9 @@ public static class ServiceCollectionExtensions
         // TranslationAgent の DI 登録
         if (IsEnabled(nameof(TranslationAgent)))
             services.AddSingleton<IAgent, TranslationAgent>();
+
+        // 動的設定ロード関連の DI 登録
+        services.AddSingleton<AgentConfigurationLoader>();
 
         // オーケストレータとサービスの DI 登録
         services.AddSingleton<AgentOrchestrator>();
