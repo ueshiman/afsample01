@@ -4,7 +4,7 @@ namespace Tutorial01B.Services;
 
 public sealed class MultiAgentChatService : IChatService
 {
-    private readonly AgentOrchestrator _orchestrator;
+    private readonly IAgentOrchestrator _orchestrator;
     private readonly ILogger<MultiAgentChatService> _logger;
 
     public MultiAgentChatService(
@@ -21,14 +21,10 @@ public sealed class MultiAgentChatService : IChatService
 
         _logger.LogInformation("Running MultiAgentChatService with message: {Message}", userMessage);
 
-        IReadOnlyDictionary<string, string> results =
-            await _orchestrator.HandleAsync(userMessage, cancellationToken);
+        var results = await _orchestrator.HandleAsync(new Uri("https://sample.com"), userMessage, Guid.NewGuid(), cancellationToken);
 
-        foreach (var (agentName, response) in results)
-        {
-            Console.WriteLine($"=== {agentName} ===");
-            Console.WriteLine(response);
+            Console.WriteLine($"=== {results} ===");
+            Console.WriteLine(userMessage);
             Console.WriteLine();
-        }
     }
 }

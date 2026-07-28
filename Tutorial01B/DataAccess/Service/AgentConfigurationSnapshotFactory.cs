@@ -1,24 +1,46 @@
-﻿namespace ConversationSuggestionService.Configuration;
+﻿
+namespace ConversationSuggestionService.Configuration;
 
-public static class AgentConfigurationSnapshotFactory
+/// <summary>
+/// <see cref="AgentServiceDefinition"/> から高速参照用の
+/// <see cref="AgentConfigurationSnapshot"/> を生成するファクトリ実装です。
+/// </summary>
+public class AgentConfigurationSnapshotFactory : IAgentConfigurationSnapshotFactory
 {
-    public static AgentConfigurationSnapshot Create(AgentServiceDefinition definition)
+    /// <summary>
+    /// エージェント定義を、ID ベースの辞書と有効エージェントの優先度順リストへ正規化し、
+    /// スナップショットとして返します。
+    /// </summary>
+    /// <param name="definition">プロバイダー、コールバック、エージェント定義を含む構成情報。</param>
+    /// <returns>
+    /// 元定義と、ID（大文字小文字を区別しない）で検索可能な辞書、
+    /// および有効エージェントを優先度降順で並べた一覧を保持するスナップショット。
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="definition"/> が <see langword="null"/> の場合。
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Providers / Callbacks / Agents のいずれかで ID が重複している場合。
+    /// </exception>
+    public AgentConfigurationSnapshot Create(AgentServiceDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        var providers = definition.Providers
+        Dictionary<string, ProviderDefinition> providers = definition.Providers
             .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
-        var callbacks = definition.Callbacks
+        Dictionary<string, CallbackDefinition> callbacks = definition.Callbacks
             .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
-        var agents = definition.Agents
+        Dictionary<string, AgentGroupDefinition> agents = definition.Agents
             .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
 
-        var enabledAgentsOrdered = definition.Agents
-            .Where(x => x.Enabled)
-            .OrderByDescending(x => x.Priority)
-            .ToList();
+        Dictionary<string, List<AgentDefinition>> enabledAgentsOrdered = definition.Agents
+            .Select(group => new KeyValuePair<string, List<AgentDefinition>>(group.Id, group.AgentGroup
+                .Where(agent => agent.Enabled)
+                .OrderByDescending(agent => agent.Priority)
+                .ToList()))
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
         return new AgentConfigurationSnapshot
         {

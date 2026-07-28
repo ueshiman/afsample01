@@ -8,7 +8,7 @@ public sealed class AgentConfigurationSnapshot
 
     public required IReadOnlyDictionary<string, CallbackDefinition> Callbacks { get; init; }
 
-    public required IReadOnlyDictionary<string, AgentDefinition> Agents { get; init; }
+    public required IReadOnlyDictionary<string, AgentGroupDefinition> Agents { get; init; }
 
-    public required IReadOnlyList<AgentDefinition> EnabledAgentsOrdered { get; init; }
+    public required IReadOnlyDictionary<string, List<AgentDefinition>> EnabledAgentsOrdered { get; init; }
 }

@@ -46,36 +46,26 @@ public static class AgentConfigurationValidator
         foreach (var agent in definition.Agents)
         {
             ValidateRequired(agent.Id, "agents[].id");
-            ValidateRequired(agent.Name, $"agents[{agent.Id}].name");
-            ValidateRequired(agent.Type, $"agents[{agent.Id}].type");
-            ValidateRequired(agent.ProviderRef, $"agents[{agent.Id}].providerRef");
-            ValidateRequired(agent.Deployment, $"agents[{agent.Id}].deployment");
-            ValidateRequired(agent.CallbackRef, $"agents[{agent.Id}].callbackRef");
-            ValidateRequired(agent.Prompt.System, $"agents[{agent.Id}].prompt.system");
+            
+            //ValidateRequired(agent.Name, $"agents[{agent.Id}].name");
+            //ValidateRequired(agent.Type, $"agents[{agent.Id}].type");
+            //ValidateRequired(agent.ProviderRef, $"agents[{agent.Id}].providerRef");
+            //ValidateRequired(agent.Deployment, $"agents[{agent.Id}].deployment");
+            //ValidateRequired(agent.CallbackRef, $"agents[{agent.Id}].callbackRef");
+            //ValidateRequired(agent.Prompt.System, $"agents[{agent.Id}].prompt.system");
 
-            if (!providerIds.Contains(agent.ProviderRef))
-            {
-                throw new InvalidOperationException(
-                    $"agents[{agent.Id}].providerRef '{agent.ProviderRef}' に対応する provider が存在しません。");
-            }
+            //if (!providerIds.Contains(agent.PlainText))
+            //{
+            //    throw new InvalidOperationException(
+            //        $"agents[{agent.Id}].PlainText '{agent.PlainText}' に対応する PlainText が存在しません。");
+            //}
 
-            if (!callbackIds.Contains(agent.CallbackRef))
-            {
-                throw new InvalidOperationException(
-                    $"agents[{agent.Id}].callbackRef '{agent.CallbackRef}' に対応する callback が存在しません。");
-            }
+            //if (!callbackIds.Contains(agent.Source))
+            //{
+            //    throw new InvalidOperationException(
+            //        $"agents[{agent.Id}].Source '{agent.Source}' に対応する callback が存在しません。");
+            //}
 
-            if (agent.TimeoutSeconds is <= 0)
-            {
-                throw new InvalidOperationException(
-                    $"agents[{agent.Id}].timeoutSeconds は 1 以上である必要があります。");
-            }
-
-            if (agent.Input.MaxTurns <= 0)
-            {
-                throw new InvalidOperationException(
-                    $"agents[{agent.Id}].input.maxTurns は 1 以上である必要があります。");
-            }
         }
 
         if (definition.Service.DefaultTimeoutSeconds <= 0)

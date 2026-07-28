@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Extensions\ServiceCollectionExtensions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="Tutorial01B.Tests.csproj" />
   </ItemGroup>
 
@@ -26,6 +30,10 @@
 	  <None Update="agentsettings.json">
 		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Extensions\" />
 	</ItemGroup>
 
 </Project>

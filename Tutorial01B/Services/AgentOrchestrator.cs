@@ -2,129 +2,142 @@ using System.ClientModel;
 using System.Collections.Concurrent;
 using ConversationSuggestionService.Configuration;
 using Microsoft.Extensions.Options;
+using Microsoft.Graph;
 using OpenAI;
 using OpenAI.Chat;
+using Tutorial01B.Agents;
 using Tutorial01B.Models;
 
 namespace Tutorial01B.Services;
 
-public sealed class AgentOrchestrator
+public class AgentOrchestrator : IAgentOrchestrator
 {
-    private readonly AgentConfigurationLoader _configurationLoader;
-    private readonly OpenAISettings _openAiSettings;
-    private readonly string _settingsFilePath;
+    //private readonly IAgentConfigurationLoader _configurationLoader;
+    //private readonly OpenAISettings _openAiSettings;
+    //private readonly IAgentConfigurationStore _configurationStore;
+    //private static readonly string _settingsFilePath;
 
-    public AgentOrchestrator(
-        AgentConfigurationLoader configurationLoader,
-        IOptions<OpenAISettings> openAiSettings,
-        IWebHostEnvironment environment)
+    private readonly ILogger<AgentOrchestrator> _logger;
+    private readonly IAgentStore _agentStore;
+    private readonly IAgentGroupChatRunner _agentGroupChatRunner;
+
+    private readonly HttpClient _httpClient = new();
+
+    public AgentOrchestrator(ILogger<AgentOrchestrator> logger, IAgentStore agentStore, IAgentGroupChatRunner agentGroupChatRunner)
     {
-        _configurationLoader = configurationLoader;
-        _openAiSettings = openAiSettings.Value;
-        _settingsFilePath = Path.Combine(environment.ContentRootPath, "agentsettings.json");
+        _logger = logger;
+        _agentStore = agentStore;
+        _agentGroupChatRunner = agentGroupChatRunner;
+        //_configurationStore = configurationStore;
+        //_openAiSettings = openAiSettings.Value;
+        //_settingsFilePath = Path.Combine(environment.ContentRootPath, "agentsettings.json");
     }
 
-    public Task<IReadOnlyDictionary<string, string>> ExecuteAsync(
-        string input,
-        string? sessionId,
-        CancellationToken cancellationToken = default)
+    public Task<Guid> ExecuteAsync(Uri callback, string input, Guid? sessionId, CancellationToken cancellationToken = default)
     {
-        return HandleAsync(input, cancellationToken);
+        return HandleAsync(callback, input, sessionId, cancellationToken);
     }
 
-    public async Task<IReadOnlyDictionary<string, string>> HandleAsync(
-        string message,
-        CancellationToken cancellationToken = default)
+    public async Task<Guid> HandleAsync(Uri callback, string message, Guid? sessionId, CancellationToken cancellationToken = default)
     {
-        var snapshot = await _configurationLoader.LoadAsync(_settingsFilePath, cancellationToken);
-        var mode = snapshot.Raw.Execution.Mode;
+        //AgentConfigurationSnapshot snapshot = _configurationStore.Current;
+        AgentEntity entity = _agentStore.GetAgent(sessionId);
+        var mode = entity.ServiceModel.Execution.Mode;
+        entity.ChatMessages.Add(new UserChatMessage(message));
 
-        return string.Equals(mode, "parallel", StringComparison.OrdinalIgnoreCase)
-            ? await ExecuteParallelAsync(snapshot, message, cancellationToken)
-            : await ExecuteSequentialAsync(snapshot, message, cancellationToken);
-    }
-
-    private async Task<IReadOnlyDictionary<string, string>> ExecuteSequentialAsync(
-        AgentConfigurationSnapshot snapshot,
-        string message,
-        CancellationToken cancellationToken)
-    {
-        var results = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var agent in snapshot.EnabledAgentsOrdered)
+        foreach (AgentGroupModel agentGroup in entity.ServiceModel.Agents)
         {
-            results[agent.Name] = await ExecuteAgentAsync(snapshot, agent, message, cancellationToken);
-        }
-
-        return results;
-    }
-
-    private async Task<IReadOnlyDictionary<string, string>> ExecuteParallelAsync(
-        AgentConfigurationSnapshot snapshot,
-        string message,
-        CancellationToken cancellationToken)
-    {
-        var results = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        using var semaphore = new SemaphoreSlim(snapshot.Raw.Execution.MaxDegreeOfParallelism);
-
-        var tasks = snapshot.EnabledAgentsOrdered.Select(async agent =>
-        {
-            await semaphore.WaitAsync(cancellationToken);
             try
             {
-                results[agent.Name] = await ExecuteAgentAsync(snapshot, agent, message, cancellationToken);
+                var result = _agentGroupChatRunner.RunAsync(agentGroup, entity.ChatMessages, 5, 10, cancellationToken);
+                // resultをUriへpostで送信する
+                using var response = await _httpClient.PostAsJsonAsync(callback, new { SessionId = entity.Id, Result = result }, cancellationToken);
+
+                response.EnsureSuccessStatusCode();
             }
-            finally
+            catch (Exception e)
             {
-                semaphore.Release();
+                _logger.LogError(e, "エージェント '{AgentGroupId}' の実行中にエラーが発生しました。", agentGroup.Id);
             }
-        });
 
-        await Task.WhenAll(tasks);
-        return new Dictionary<string, string>(results, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return entity.Id;
+        //return string.Equals(mode, "parallel", StringComparison.OrdinalIgnoreCase) ? await ExecuteParallelAsync(entity, message, cancellationToken) : await ExecuteSequentialAsync(entity, message, cancellationToken);
     }
 
-    private async Task<string> ExecuteAgentAsync(
-        AgentConfigurationSnapshot snapshot,
-        AgentDefinition agent,
-        string message,
-        CancellationToken cancellationToken)
-    {
-        var provider = snapshot.Providers[agent.ProviderRef];
-        var endpoint = ResolveEndpoint(provider.Endpoint);
+    //private async Task<IReadOnlyDictionary<string, string>> ExecuteSequentialAsync(AgentEntity entity, string message, CancellationToken cancellationToken)
+    //{
+    //    var results = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        var chatClient = new ChatClient(
-            credential: new ApiKeyCredential(_openAiSettings.ApiKey),
-            model: agent.Deployment,
-            options: new OpenAIClientOptions
-            {
-                Endpoint = new Uri(endpoint)
-            });
+    //    foreach (AgentGroupModel agent in entity.ServiceModel.Agents)
+    //    {
+    //        results[agent.Id] = await ExecuteAgentAsync(entity, agent, message, cancellationToken);
+    //    }
 
-        IReadOnlyList<ChatMessage> messages =
-        [
-            new SystemChatMessage(agent.Prompt.System),
-            new UserChatMessage(message)
-        ];
+    //    return results;
+    //}
 
-        var timeoutSeconds = agent.TimeoutSeconds ?? snapshot.Raw.Service.DefaultTimeoutSeconds;
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        linkedCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+    //private async Task<IReadOnlyDictionary<string, string>> ExecuteParallelAsync(AgentConfigurationSnapshot snapshot, string message, CancellationToken cancellationToken)
+    //{
+    //    var results = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    //    using var semaphore = new SemaphoreSlim(snapshot.Raw.Execution.MaxDegreeOfParallelism);
 
-        ChatCompletion completion = await chatClient.CompleteChatAsync(messages, cancellationToken: linkedCts.Token);
+    //    var tasks = snapshot.EnabledAgentsOrdered.Select(async agent =>
+    //    {
+    //        await semaphore.WaitAsync(cancellationToken);
+    //        try
+    //        {
+    //            results[agent.Id] = await ExecuteAgentAsync(snapshot, agent, message, cancellationToken);
+    //        }
+    //        finally
+    //        {
+    //            semaphore.Release();
+    //        }
+    //    });
 
-        return string.Join(
-            Environment.NewLine,
-            completion.Content
-                .Where(x => !string.IsNullOrWhiteSpace(x.Text))
-                .Select(x => x.Text));
-    }
+    //    await Task.WhenAll(tasks);
+    //    return new Dictionary<string, string>(results, StringComparer.OrdinalIgnoreCase);
+    //}
 
-    private string ResolveEndpoint(string configuredEndpoint)
-    {
-        return string.IsNullOrWhiteSpace(configuredEndpoint)
-            || configuredEndpoint.Contains("your-resource", StringComparison.OrdinalIgnoreCase)
-            ? _openAiSettings.Endpoint
-            : configuredEndpoint;
-    }
+    //private async Task<string> ExecuteAgentAsync(AgentConfigurationSnapshot snapshot, AgentGroupDefinition agentGroup, string message, CancellationToken cancellationToken)
+    //{
+    //    var provider = snapshot.Providers[agentGroup.ProviderRef];
+    //    var endpoint = ResolveEndpoint(provider.Endpoint);
+
+    //    var chatClient = new ChatClient(
+    //        credential: new ApiKeyCredential(_openAiSettings.ApiKey),
+    //        model: agentGroup.Deployment,
+    //        options: new OpenAIClientOptions
+    //        {
+    //            Endpoint = new Uri(endpoint)
+    //        });
+
+    //    IReadOnlyList<ChatMessage> messages =
+    //    [
+    //        new SystemChatMessage(agentGroup.Prompt.System),
+    //        new UserChatMessage(message)
+    //    ];
+
+    //    var timeoutSeconds = agentGroup.TimeoutSeconds ?? snapshot.Raw.Service.DefaultTimeoutSeconds;
+    //    using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    //    linkedCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+    //    ChatCompletion completion = await chatClient.CompleteChatAsync(messages, cancellationToken: linkedCts.Token);
+
+    //    return string.Join(
+    //        Environment.NewLine,
+    //        completion.Content
+    //            .Where(x => !string.IsNullOrWhiteSpace(x.Text))
+    //            .Select(x => x.Text));
+    //}
+
+    //private string ResolveEndpoint(string configuredEndpoint)
+    //{
+    //    return string.IsNullOrWhiteSpace(configuredEndpoint)
+    //        || configuredEndpoint.Contains("your-resource", StringComparison.OrdinalIgnoreCase)
+    //        ? _openAiSettings.Endpoint
+    //        : configuredEndpoint;
+    //}
 }
+

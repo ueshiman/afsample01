@@ -5,7 +5,7 @@ using System.ClientModel;
 
 #pragma warning disable OPENAI001
 
-const string deploymentName = "gpt-5.2";
+const string deploymentName = "gpt-5.6-luna";
 string endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
                   ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT is not set.");
 

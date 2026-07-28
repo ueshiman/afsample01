@@ -1,5 +1,4 @@
 using System.ClientModel;
-using ConversationSuggestionService.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -8,6 +7,7 @@ using OpenAI.Chat;
 using SampleOpenAIApp.Clients;
 using Tutorial01B.Agents;
 using Tutorial01B.Clients;
+using Tutorial01B.DataAccess.Service;
 using Tutorial01B.Models;
 using Tutorial01B.Services;
 
@@ -53,17 +53,12 @@ public static class ServiceCollectionExtensions
         {
             OpenAISettings settings = sp.GetRequiredService<IOptions<OpenAISettings>>().Value;
 
-            return new ChatClient(
-                credential: new ApiKeyCredential(settings.ApiKey),
-                model: settings.DeploymentName,
-                options: new OpenAIClientOptions
-                {
-                    Endpoint = new Uri(settings.Endpoint)
-                });
+            return new ChatClient(credential: new ApiKeyCredential(settings.ApiKey), model: settings.DeploymentName, options: new OpenAIClientOptions { Endpoint = new Uri(settings.Endpoint) });
         });
 
         services.AddSingleton<IChatCompletionExecutor, OpenAIChatCompletionExecutor>();
         services.AddSingleton<ChatService>();
+        services.AddHttpClient();
 
         // マルチエージェントシステムの DI 登録
         services.AddMultiAgentSystem(configuration);

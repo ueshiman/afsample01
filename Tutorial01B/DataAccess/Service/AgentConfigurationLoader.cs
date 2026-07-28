@@ -1,9 +1,17 @@
-﻿using System.Text.Json;
+﻿using ConversationSuggestionService.Configuration;
+using System.Text.Json;
 
-namespace ConversationSuggestionService.Configuration;
+namespace Tutorial01B.DataAccess.Service;
 
-public sealed class AgentConfigurationLoader
+public sealed class AgentConfigurationLoader : IAgentConfigurationLoader
 {
+    private readonly IAgentConfigurationSnapshotFactory _agentConfigurationSnapshotFactory;
+
+    public AgentConfigurationLoader(IAgentConfigurationSnapshotFactory agentConfigurationSnapshotFactory)
+    {
+        _agentConfigurationSnapshotFactory = agentConfigurationSnapshotFactory;
+    }
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -11,20 +19,18 @@ public sealed class AgentConfigurationLoader
         AllowTrailingCommas = true
     };
 
-    public async Task<AgentConfigurationSnapshot> LoadAsync(
-        string filePath,
-        CancellationToken cancellationToken = default)
+    public async Task<AgentConfigurationSnapshot> LoadAsync(string filePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
-        var json = await File.ReadAllTextAsync(filePath, cancellationToken);
+        string json = await File.ReadAllTextAsync(filePath, cancellationToken);
 
-        var definition = JsonSerializer.Deserialize<AgentServiceDefinition>(json, SerializerOptions)
+        AgentServiceDefinition definition = JsonSerializer.Deserialize<AgentServiceDefinition>(json, SerializerOptions)
                          ?? throw new InvalidOperationException("設定ファイルを読み込めませんでした。");
 
         AgentConfigurationValidator.Validate(definition);
 
-        return AgentConfigurationSnapshotFactory.Create(definition);
+        return _agentConfigurationSnapshotFactory.Create(definition);
     }
 
     public AgentConfigurationSnapshot Load(string filePath)
@@ -38,6 +44,6 @@ public sealed class AgentConfigurationLoader
 
         AgentConfigurationValidator.Validate(definition);
 
-        return AgentConfigurationSnapshotFactory.Create(definition);
+        return _agentConfigurationSnapshotFactory.Create(definition);
     }
 }

@@ -2,29 +2,29 @@
 
 namespace ConversationSuggestionService.Services;
 
-public sealed class AgentExecutionService
+public sealed class AgentExecutionService : IAgentExecutionService
 {
-    private readonly AgentConfigurationStore _configurationStore;
+    private readonly IAgentConfigurationStore _configurationStore;
 
-    public AgentExecutionService(AgentConfigurationStore configurationStore)
+    public AgentExecutionService(IAgentConfigurationStore configurationStore)
     {
         _configurationStore = configurationStore;
     }
 
-    public Task<AgentExecutionResult> ExecuteAsync(
-        string conversation,
-        CancellationToken cancellationToken = default)
+    public Task<AgentExecutionResult> ExecuteAsync(string conversation, CancellationToken cancellationToken = default)
     {
         var current = _configurationStore.Current;
 
         var items = current.EnabledAgentsOrdered
+            .Select(kvp => kvp.Value)
+            .Select(groups => groups
             .Select(agent => new AgentExecutionItem
             {
                 AgentId = agent.Id,
                 AgentName = agent.Name,
                 ProviderRef = agent.ProviderRef,
                 Deployment = agent.Deployment
-            })
+            }).ToList())
             .ToList();
 
         var result = new AgentExecutionResult
@@ -41,7 +41,7 @@ public sealed class AgentExecutionResult
 {
     public string Conversation { get; set; } = string.Empty;
 
-    public List<AgentExecutionItem> Items { get; set; } = new();
+    public List<List<AgentExecutionItem>> Items { get; set; } = new();
 }
 
 public sealed class AgentExecutionItem
