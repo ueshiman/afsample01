@@ -67,20 +67,22 @@ namespace Tutorial01B.Services
                         continue;
                     }
 
-                    string responseText = string.Concat(
-                        completion.Content
-                            .Select(content => content.Text));
+                    string responseText = string.Concat(completion.Content.Select(content => content.Text));
+                    Console.WriteLine($"エージェント '{agent.Name}' の応答: {responseText}");
 
                     if (string.IsNullOrWhiteSpace(responseText))
                     {
-                        throw new InvalidOperationException($"エージェント '{agent.Name}' からテキスト応答が返されませんでした。");
+                        _logger.LogInformation("エージェント '{AgentName}' からテキスト応答が返されませんでした。", agent.Name);
+                        //throw new InvalidOperationException($"エージェント '{agent.Name}' からテキスト応答が返されませんでした。");
                     }
-
-                    results.Add(new AgentChatResult(agent.Id, agent.Name, round, responseText));
-
-                    // 後続エージェントへ回答を引き継ぐ
-                    sharedHistory.Add(new AssistantChatMessage($"【発言者: {agent.Name}】\n{responseText}"));
+                    else
+                    {
+                        results.Add(new AgentChatResult(agent.Id, agent.Name, round, responseText));
+                        // 後続エージェントへ回答を引き継ぐ
+                        sharedHistory.Add(new AssistantChatMessage($"【発言者: {agent.Name}】\n{responseText}"));
+                    }
                 }
+                if(results.Any()) break; // 1ラウンドで1つの応答があれば次のラウンドへ進む
             }
 
             return new AgentGroupChatResult(group.Id, results);

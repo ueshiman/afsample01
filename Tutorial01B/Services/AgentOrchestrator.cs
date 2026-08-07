@@ -49,9 +49,9 @@ public class AgentOrchestrator : IAgentOrchestrator
         {
             try
             {
-                var result = _agentGroupChatRunner.RunAsync(agentGroup, entity.ChatMessages, 5, 10, cancellationToken);
+                var result = await _agentGroupChatRunner.RunAsync(agentGroup, entity.ChatMessages, 5, 10, cancellationToken);
                 // resultをUriへpostで送信する
-                using var response = await _httpClient.PostAsJsonAsync(callback, new { SessionId = entity.Id, Result = result }, cancellationToken);
+                    using var response = await _httpClient.PostAsJsonAsync(callback, new { SessionId = entity.Id, Result = result }, cancellationToken);
 
                 response.EnsureSuccessStatusCode();
             }
