@@ -1,11 +1,25 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-
+using System.Text.Encodings.Web;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.Configuration;
 
 // 実行オプションを環境変数から読み込み
 var options = ClientOptions.FromEnvironment();
+
+// 表示設定（appsettings + 環境変数）
+var config = new ConfigurationBuilder()
+    .SetBasePath(AppContext.BaseDirectory)
+    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables()
+    .Build();
+
+var showInputLogs = config.GetValue("Client:ShowInputLogs", true);
+
 // 第1引数に入力ファイルパス、未指定時は既定値を使用
 var inputFilePath = args.Length > 0 ? args[0] : "inputs.txt";
 
@@ -40,7 +54,7 @@ Console.CancelKeyPress += (_, e) =>
 var bus = new MessageBus();
 var callbackServerTask = RunCallbackServerAsync(options.CallbackUrl, bus, cts.Token);
 var senderTask = SendInputsAsync(lines, options, bus, cts.Token);
-var rendererTask = RenderLoopAsync(bus, cts.Token);
+var rendererTask = RenderLoopAsync(bus, showInputLogs, cts.Token);
 
 // 送信完了後、コールバック受信待ちの猶予を確保してから終了
 await senderTask;
@@ -61,6 +75,7 @@ static async Task SendInputsAsync(
         BaseAddress = new Uri(options.BaseUrl)
     };
 
+    Guid? sessionId = null;
     foreach (var line in lines)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -69,7 +84,7 @@ static async Task SendInputsAsync(
         var requestId = $"REQ-{DateTimeOffset.Now:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}"[..28];
         var request = new ExecuteOrchestratorRequest(
             line,
-            null,
+            sessionId,
             options.CallbackUrl,
             requestId);
 
@@ -82,6 +97,24 @@ static async Task SendInputsAsync(
         using var response = await client.SendAsync(httpRequest, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
+        // bodyがJSONなら、sessionIdを抽出して次回送信に利用
+        if (response.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(body))
+        {
+            try
+            {
+                var root = JsonNode.Parse(body);
+                var sessionIdNode = root?["sessionId"];
+                if (sessionIdNode is not null && sessionIdNode is JsonValue value && value.TryGetValue<Guid>(out var parsedSessionId))
+                {
+                    sessionId = parsedSessionId;
+                }
+            }
+            catch
+            {
+                // JSON解析失敗時は無視して次回送信へ
+            }
+        }
+
         // 入力送信ログを表示キューへ積む
         bus.EnqueueInput($"[{requestId}] {line}");
         if (!response.IsSuccessStatusCode)
@@ -90,7 +123,7 @@ static async Task SendInputsAsync(
         }
 
         // 短い間隔を空けて連続送信
-        await Task.Delay(200, cancellationToken);
+        await Task.Delay(2000, cancellationToken);
     }
 }
 
@@ -109,15 +142,18 @@ static async Task RunCallbackServerAsync(string callbackUrl, MessageBus bus, Can
             raw = await reader.ReadToEndAsync(cancellationToken);
         }
 
-        // 受信データを整形して表示キューへ積む
-        if (TryFormatCallback(raw, out var message))
+        var decoded = DecodeCallbackPayload(raw, context.Request.ContentType);
+
+        // 整形可否に関わらず同じ出力経路（callbackキュー）へ積む
+        if (TryFormatCallback(decoded, out var message))
         {
             bus.EnqueueCallback(message);
         }
         else
         {
-            Console.WriteLine(message);
+            Debug.WriteLine($"Failed to format callback: {message}");
         }
+
         return Results.Ok();
     });
 
@@ -127,8 +163,8 @@ static async Task RunCallbackServerAsync(string callbackUrl, MessageBus bus, Can
     await app.WaitForShutdownAsync(cancellationToken);
 }
 
-// 送信ログは通常表示、コールバックは右寄せ赤字で表示
-static async Task RenderLoopAsync(MessageBus bus, CancellationToken cancellationToken)
+// 送信ログは通常表示、コールバックも同じコンソールへ表示
+static async Task RenderLoopAsync(MessageBus bus, bool showInputLogs, CancellationToken cancellationToken)
 {
     Console.OutputEncoding = Encoding.UTF8;
     while (!cancellationToken.IsCancellationRequested)
@@ -137,18 +173,18 @@ static async Task RenderLoopAsync(MessageBus bus, CancellationToken cancellation
         while (bus.TryDequeueInput(out var input))
         {
             drained = true;
-            Console.ResetColor();
-            Console.WriteLine(input);
+            if (showInputLogs)
+            {
+                Console.ResetColor();
+                Console.WriteLine(input);
+            }
         }
 
         while (bus.TryDequeueCallback(out var callback))
         {
             drained = true;
-            var width = Math.Max(40, Console.WindowWidth - 2);
-            var shown = callback.Length > width ? callback[..width] : callback;
-            var pad = Math.Max(0, width - shown.Length);
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"{new string(' ', pad)}{shown}");
+            Console.WriteLine(callback);
             Console.ResetColor();
         }
 
@@ -159,7 +195,38 @@ static async Task RenderLoopAsync(MessageBus bus, CancellationToken cancellation
     }
 }
 
-// JSONなら1行に正規化し、JSONでなければ生文字列をそのまま返す
+// callback本文のURLエンコードを必要時のみデコード
+static string DecodeCallbackPayload(string raw, string? contentType)
+{
+    if (string.IsNullOrWhiteSpace(raw))
+    {
+        return raw;
+    }
+
+    var trimmed = raw.TrimStart();
+    if (trimmed.StartsWith('{') || trimmed.StartsWith('['))
+    {
+        return raw;
+    }
+
+    if (!string.IsNullOrWhiteSpace(contentType) &&
+        contentType.Contains("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
+    {
+        var index = raw.IndexOf('=');
+        return index >= 0 && index < raw.Length - 1
+            ? WebUtility.UrlDecode(raw[(index + 1)..])
+            : WebUtility.UrlDecode(raw);
+    }
+
+    if (raw.Contains('%') || raw.Contains('+'))
+    {
+        return WebUtility.UrlDecode(raw);
+    }
+
+    return raw;
+}
+
+// JSONなら1行に正規化し、必要な箇所をデコードして返す
 static bool TryFormatCallback(string raw, out string formatted)
 {
     if (string.IsNullOrWhiteSpace(raw))
@@ -170,15 +237,110 @@ static bool TryFormatCallback(string raw, out string formatted)
 
     try
     {
-        using var json = JsonDocument.Parse(raw);
-        formatted = JsonSerializer.Serialize(json.RootElement, new JsonSerializerOptions { WriteIndented = false });
-        return true;
+        var root = JsonNode.Parse(raw);
+
+        // 例: { "results": [ { "content": "..." } ] }
+
+        var resultsNode = root?["result"]?["results"]?[0]?["content"];
+
+        var content = resultsNode?.GetValue<string>();
+
+        if (!string.IsNullOrWhiteSpace(content))
+        {
+            formatted = content;
+            return true;
+        }
+
+        formatted = "(results.content not found)";
+        return false;
     }
     catch
     {
         formatted = raw;
         return false;
     }
+}
+
+static void DecodeNestedResultPayload(JsonObject root, string outerPropertyName)
+{
+    if (!root.TryGetPropertyValue(outerPropertyName, out var outerNode) || outerNode is null)
+    {
+        return;
+    }
+
+    JsonObject? innerObject = null;
+
+    // 既に object の場合
+    if (outerNode is JsonObject existingObject)
+    {
+        innerObject = existingObject;
+    }
+    // 文字列JSONの場合
+    else if (outerNode is JsonValue outerValue && outerValue.TryGetValue<string>(out var outerText))
+    {
+        var decodedOuterText = DecodeMaybeUrlEncoded(outerText);
+
+        if (TryParseJsonObject(decodedOuterText, out var parsedObject))
+        {
+            innerObject = parsedObject;
+            root[outerPropertyName] = innerObject;
+        }
+        else
+        {
+            root[outerPropertyName] = decodedOuterText;
+            return;
+        }
+    }
+
+    if (innerObject is null)
+    {
+        return;
+    }
+
+    // 内側プロパティ名の揺れに対応
+    DecodeInnerStringValue(innerObject, "result");
+    DecodeInnerStringValue(innerObject, "reslut");
+}
+
+static void DecodeInnerStringValue(JsonObject obj, string propertyName)
+{
+    if (!obj.TryGetPropertyValue(propertyName, out var node) || node is not JsonValue value)
+    {
+        return;
+    }
+
+    if (!value.TryGetValue<string>(out var text))
+    {
+        return;
+    }
+
+    obj[propertyName] = DecodeMaybeUrlEncoded(text);
+}
+
+static bool TryParseJsonObject(string text, out JsonObject? parsed)
+{
+    parsed = null;
+    try
+    {
+        parsed = JsonNode.Parse(text) as JsonObject;
+        return parsed is not null;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+static string DecodeMaybeUrlEncoded(string value)
+{
+    if (string.IsNullOrEmpty(value))
+    {
+        return value;
+    }
+
+    return (value.Contains('%') || value.Contains('+'))
+        ? WebUtility.UrlDecode(value)
+        : value;
 }
 
 sealed record ExecuteOrchestratorRequest(string Input, Guid? SessionId, string CallbackUrl, string RequestId);
