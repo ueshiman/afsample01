@@ -3,15 +3,20 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 
+
+// 実行オプションを環境変数から読み込み
 var options = ClientOptions.FromEnvironment();
+// 第1引数に入力ファイルパス、未指定時は既定値を使用
 var inputFilePath = args.Length > 0 ? args[0] : "inputs.txt";
 
+// 入力ファイル存在チェック
 if (!File.Exists(inputFilePath))
 {
     Console.Error.WriteLine($"入力ファイルが見つかりません: {Path.GetFullPath(inputFilePath)}");
     return;
 }
 
+// 空行を除いた送信対象の入力行を読み込み
 var lines = File.ReadAllLines(inputFilePath, Encoding.UTF8)
     .Select(x => x.Trim())
     .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -23,6 +28,7 @@ if (lines.Length == 0)
     return;
 }
 
+// Ctrl + C で安全に停止できるようにキャンセル機構を設定
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -30,11 +36,13 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
+// 送信処理、コールバック受信サーバー、表示ループを並列起動
 var bus = new MessageBus();
 var callbackServerTask = RunCallbackServerAsync(options.CallbackUrl, bus, cts.Token);
 var senderTask = SendInputsAsync(lines, options, bus, cts.Token);
 var rendererTask = RenderLoopAsync(bus, cts.Token);
 
+// 送信完了後、コールバック受信待ちの猶予を確保してから終了
 await senderTask;
 await Task.Delay(TimeSpan.FromSeconds(10), cts.Token).ContinueWith(_ => Task.CompletedTask);
 cts.Cancel();
@@ -57,6 +65,7 @@ static async Task SendInputsAsync(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // リクエストごとの追跡用IDを生成
         var requestId = $"REQ-{DateTimeOffset.Now:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}"[..28];
         var request = new ExecuteOrchestratorRequest(
             line,
@@ -73,16 +82,19 @@ static async Task SendInputsAsync(
         using var response = await client.SendAsync(httpRequest, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
+        // 入力送信ログを表示キューへ積む
         bus.EnqueueInput($"[{requestId}] {line}");
         if (!response.IsSuccessStatusCode)
         {
             bus.EnqueueCallback($"送信失敗 {response.StatusCode}: {body}");
         }
 
+        // 短い間隔を空けて連続送信
         await Task.Delay(200, cancellationToken);
     }
 }
 
+// コールバック受信用の最小Webサーバーを起動
 static async Task RunCallbackServerAsync(string callbackUrl, MessageBus bus, CancellationToken cancellationToken)
 {
     var builder = WebApplication.CreateBuilder();
@@ -97,8 +109,15 @@ static async Task RunCallbackServerAsync(string callbackUrl, MessageBus bus, Can
             raw = await reader.ReadToEndAsync(cancellationToken);
         }
 
-        var message = TryFormatCallback(raw);
-        bus.EnqueueCallback(message);
+        // 受信データを整形して表示キューへ積む
+        if (TryFormatCallback(raw, out var message))
+        {
+            bus.EnqueueCallback(message);
+        }
+        else
+        {
+            Console.WriteLine(message);
+        }
         return Results.Ok();
     });
 
@@ -108,6 +127,7 @@ static async Task RunCallbackServerAsync(string callbackUrl, MessageBus bus, Can
     await app.WaitForShutdownAsync(cancellationToken);
 }
 
+// 送信ログは通常表示、コールバックは右寄せ赤字で表示
 static async Task RenderLoopAsync(MessageBus bus, CancellationToken cancellationToken)
 {
     Console.OutputEncoding = Encoding.UTF8;
@@ -139,26 +159,31 @@ static async Task RenderLoopAsync(MessageBus bus, CancellationToken cancellation
     }
 }
 
-static string TryFormatCallback(string raw)
+// JSONなら1行に正規化し、JSONでなければ生文字列をそのまま返す
+static bool TryFormatCallback(string raw, out string formatted)
 {
     if (string.IsNullOrWhiteSpace(raw))
     {
-        return "(empty callback)";
+        formatted = "(empty callback)";
+        return false;
     }
 
     try
     {
         using var json = JsonDocument.Parse(raw);
-        return JsonSerializer.Serialize(json.RootElement, new JsonSerializerOptions { WriteIndented = false });
+        formatted = JsonSerializer.Serialize(json.RootElement, new JsonSerializerOptions { WriteIndented = false });
+        return true;
     }
     catch
     {
-        return raw;
+        formatted = raw;
+        return false;
     }
 }
 
 sealed record ExecuteOrchestratorRequest(string Input, Guid? SessionId, string CallbackUrl, string RequestId);
 
+// 送信ログとコールバックログを分離して保持する軽量キュー
 sealed class MessageBus
 {
     private readonly ConcurrentQueue<string> _inputQueue = new();
@@ -170,6 +195,7 @@ sealed class MessageBus
     public bool TryDequeueCallback(out string value) => _callbackQueue.TryDequeue(out value!);
 }
 
+// 環境変数から接続先設定を組み立てるオプション
 sealed class ClientOptions
 {
     public string BaseUrl { get; init; } = "http://localhost:12670/";
@@ -188,6 +214,7 @@ sealed class ClientOptions
         };
     }
 
+    // BaseUrl末尾のスラッシュを保証
     private static string NormalizeBaseUrl(string baseUrl)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
