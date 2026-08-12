@@ -260,6 +260,89 @@
             "maxOutputTokens": 1200
           }
         }
+      ],
+      "coordinators": [
+        {
+          "id": "response-coordinator",
+          "name": "Response Coordinator",
+          "enabled": true,
+          "type": "coordination",
+
+          "providerRef": "aoai-main",
+          "deployment": "gpt-5.6-luna",
+
+          "priority": 100,
+          "timeoutSeconds": 20,
+
+          "prompt": {
+            "system": "あなたはマルチエージェント会話の調整エージェントです。今回のループで各回答エージェントが生成した回答を確認し、重複、矛盾、不足している観点を抽出してください。必要に応じて、次のループで各回答エージェントが考慮すべき事項を具体的に提示してください。"
+          },
+
+          "output": {
+            "format": "json",
+            "schemaName": "CoordinationResult"
+          },
+
+          "settings": {
+            "temperature": 0.1,
+            "maxOutputTokens": 1000
+          }
+        },
+        {
+          "id": "completion-judge",
+          "name": "Completion Judge",
+          "enabled": true,
+          "type": "completion-judge",
+
+          "providerRef": "aoai-main",
+          "deployment": "gpt-5.6-luna",
+
+          "priority": 200,
+          "timeoutSeconds": 15,
+
+          "prompt": {
+            "system": "あなたはマルチエージェント会話の終了判定エージェントです。今回のループまでの会話、各回答エージェントの回答、各調整エージェントの結果を確認し、さらにループを継続する必要があるか判定してください。ユーザーの要求に対する回答が十分で、重大な未解決事項や矛盾がなく、追加のループによって有意な改善が期待できない場合は complete としてください。追加の検討、修正、確認によって回答の改善が期待できる場合は continue としてください。continue の場合は、次のループで検討すべき内容を nextInstruction に具体的に記載してください。decision、reason、nextInstruction をJSONで返してください。decision は continue または complete のいずれかとしてください。"
+          },
+
+          "output": {
+            "format": "json",
+            "schemaName": "CompletionJudgeResult"
+          },
+
+          "settings": {
+            "temperature": 0.0,
+            "maxOutputTokens": 500
+          }
+        }
+      ],
+
+      "summaryGroup": [
+        {
+          "id": "conversation-summarizer",
+          "name": "Conversation Summarizer",
+          "enabled": true,
+          "type": "summary",
+
+          "providerRef": "aoai-main",
+          "deployment": "gpt-5.6-luna",
+
+          "priority": 100,
+          "timeoutSeconds": 20,
+
+          "prompt": {
+            "system": "あなたは会話サマリー作成エージェントです。マルチエージェント処理のループ終了後に、元の会話と各ループで生成された内容を確認し、会話全体を簡潔に要約してください。重要な決定事項、確認された事実、未解決事項、次のアクションがある場合は、それらが分かるようにまとめてください。"
+          },
+
+          "output": {
+            "format": "json",
+            "schemaName": "ConversationSummaryResult"
+          },
+
+          "settings": {
+            "temperature": 0.1,
+            "maxOutputTokens": 1200
+          }
+        }
       ]
     }
   ]
