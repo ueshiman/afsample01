@@ -61,7 +61,16 @@ await senderTask;
 await Task.Delay(TimeSpan.FromSeconds(10), cts.Token).ContinueWith(_ => Task.CompletedTask);
 cts.Cancel();
 
-await Task.WhenAll(callbackServerTask, rendererTask);
+// Main の末尾
+try
+{
+    await Task.WhenAll(callbackServerTask, rendererTask);
+}
+catch (OperationCanceledException) when (cts.IsCancellationRequested)
+{
+    // 正常なキャンセル終了として扱う
+}
+
 return;
 
 static async Task SendInputsAsync(
@@ -190,7 +199,14 @@ static async Task RenderLoopAsync(MessageBus bus, bool showInputLogs, Cancellati
 
         if (!drained)
         {
-            await Task.Delay(100, cancellationToken);
+            try
+            {
+                await Task.Delay(100, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break; // ループを正常終了
+            }
         }
     }
 }
