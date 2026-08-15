@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Diagnostics;
+using System.Text.Json;
 using OpenAI.Chat;
 using Tutorial01B.Models;
 
@@ -30,12 +31,15 @@ namespace Tutorial01B.Services
 
             // 実行前にChatClientの設定状態を検証
             ValidateChatClients(enabledAgents.Concat(enabledCoordinators).Concat(enabledSummaryGroup));
-
-            List<ChatMessage> sharedHistory = message;
-            List<AgentChatResult> results = [];
+            List<ChatMessage> sourceHistory = new(message);
+            List<ChatMessage> sharedHistory = new(message);
+            List<AgentChatResult> results = new();
+            List<AgentChatResult> summary = new();
 
             for (int round = 1; round <= maxRounds; round++)
             {
+                List<ChatMessage> resultSummary = new();
+
                 foreach (AgentModel agent in enabledAgents)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -69,6 +73,7 @@ namespace Tutorial01B.Services
                     }
 
                     string responseText = string.Concat(completion.Content.Select(content => content.Text));
+
                     Console.WriteLine($"エージェント '{agent.Name}' の応答: {responseText}");
 
                     if (string.IsNullOrWhiteSpace(responseText))
@@ -80,11 +85,13 @@ namespace Tutorial01B.Services
                         results.Add(new AgentChatResult(agent.Id, agent.Name, round, responseText));
                         // 後続エージェントへ回答を引き継ぐ
                         sharedHistory.Add(new AssistantChatMessage($"【発言者: {agent.Name}】\n{responseText}"));
+                        //resultSummary.Add(new UserChatMessage(responseText));
+                        resultSummary.Add(new AssistantChatMessage($"【候補情報: {agent.Name}】\n{responseText}"));
                     }
                 }
 
                 // エージェント結果がある場合のみ、後段の coordinator を実行
-                if (results.Count > 0)
+                if (resultSummary.Count > 0)
                 {
                     foreach (AgentModel coordinator in enabledCoordinators)
                     {
@@ -125,21 +132,28 @@ namespace Tutorial01B.Services
                             continue;
                         }
 
-                        results.Add(new AgentChatResult(coordinator.Id, coordinator.Name, round + 1, responseText));
+                        //results.Add(new AgentChatResult(coordinator.Id, coordinator.Name, round + 1, responseText));
+                        //resultSummary.Add(ChatMessage.CreateAssistantMessage(responseText));
 
                         string handoffText = BuildCoordinatorHandoffMessage(responseText, out bool isComplete);
                         sharedHistory.Add(new AssistantChatMessage($"【発言者: {coordinator.Name}】\n{handoffText}"));
-
+                        if (!string.IsNullOrWhiteSpace(handoffText))
+                        {
+                            sharedHistory.Add(new SystemChatMessage($"【内部調整情報: {coordinator.Name}】\n{handoffText}"));
+                        }
                         if (isComplete)
                         {
                             _logger.LogInformation("コーディネーター '{AgentName}' が complete を返したため、後続処理を終了します。", coordinator.Name);
                             break;
                         }
+                        //resultSummary.Add(ChatMessage.CreateAssistantMessage(handoffText));
+
                     }
                 }
 
+
                 // summaryGroup処理
-                if (enabledSummaryGroup.Count > 0 && results.Count > 0)
+                if (enabledSummaryGroup.Count > 0 && resultSummary.Count > 0)
                 {
                     foreach (AgentModel summaryModel in enabledSummaryGroup)
                     {
@@ -151,7 +165,12 @@ namespace Tutorial01B.Services
                         List<ChatMessage> requestMessages =
                         [
                             new SystemChatMessage(summaryModel.Prompt.System),
-                            .. GetRecentHistory(sharedHistory, maxTurns)
+
+                            // 元の会話
+                            .. GetRecentHistory(sourceHistory, maxTurns),
+
+                            // Agent が生成した提示候補だけ
+                            .. resultSummary
                         ];
 
                         ChatCompletionOptions options = CreateOptions(summaryModel);
@@ -179,9 +198,10 @@ namespace Tutorial01B.Services
                             _logger.LogInformation("サマリー '{AgentName}' からテキスト応答が返されませんでした。", summaryModel.Name);
                             continue;
                         }
-
+                        Debug.WriteLine(responseText);
                         results.Add(new AgentChatResult(summaryModel.Id, summaryModel.Name, round + 2, responseText));
-                        sharedHistory.Add(new AssistantChatMessage($"【発言者: {summaryModel.Name}】\n{responseText}"));
+                        summary.Add(new AgentChatResult(summaryModel.Id, summaryModel.Name, round + 2, responseText));
+                        //sharedHistory.Add(new AssistantChatMessage($"【発言者: {summaryModel.Name}】\n{responseText}"));
                     }
                 }
 
@@ -192,7 +212,7 @@ namespace Tutorial01B.Services
 
 
 
-            return new AgentGroupChatResult(group.Id, results);
+            return new AgentGroupChatResult(group.Id, summary);
         }
 
         private static string BuildCoordinatorHandoffMessage(string responseText, out bool isComplete)
@@ -212,6 +232,10 @@ namespace Tutorial01B.Services
                 string? decision = GetJsonStringIgnoreCase(document.RootElement, "decision");
 
                 isComplete = string.Equals(decision, "complete", StringComparison.OrdinalIgnoreCase);
+                if (isComplete)
+                {
+                    return string.Empty;
+                }
 
                 if (string.IsNullOrWhiteSpace(reason) && string.IsNullOrWhiteSpace(nextInstruction))
                 {
@@ -261,8 +285,7 @@ namespace Tutorial01B.Services
 
             if (agent.Settings.Temperature is not null)
             {
-                options.Temperature =
-                    (float)agent.Settings.Temperature.Value;
+                options.Temperature = (float)agent.Settings.Temperature.Value;
             }
 
             if (agent.Settings.MaxOutputTokens is not null)
