@@ -58,27 +58,46 @@ public sealed class AgentServiceModel
 public sealed class AgentGroupModel
 {
     /// <summary>
-    /// プロバイダー識別子を取得または設定します。
+    /// グループ識別子を取得または設定します。
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
-    [JsonPropertyName("source")]
-    public string Source { get; set; } = string.Empty;
-
-    [JsonPropertyName("plainText")]
-    public string PlainText { get; set; } = string.Empty;
+    /// <summary>
+    /// 入力定義を取得または設定します。
+    /// </summary>
+    [JsonPropertyName("input")]
+    public AgentInputModel Input { get; set; } = new();
 
     /// <summary>
     /// 実行対象エージェントの定義一覧を取得または設定します。
     /// </summary>
     [JsonPropertyName("agentsGroup")]
-    public List<AgentModel> AgentGroup { get; set; }
+    public List<AgentModel> AgentGroup { get; set; } = [];
 
-    //public AgentGroupModel(List<AgentModel> agentGroup)
-    //{
-    //    AgentGroup = agentGroup;
-    //}
+    /// <summary>
+    /// コーディネーター定義の一覧を取得または設定します。
+    /// </summary>
+    [JsonPropertyName("coordinators")]
+    public List<AgentModel> Coordinators { get; set; } = [];
+
+    /// <summary>
+    /// サマリー生成エージェント定義の一覧を取得または設定します。
+    /// </summary>
+    [JsonPropertyName("summaryGroup")]
+    public List<AgentModel> SummaryGroup { get; set; } = [];
+}
+
+public sealed class AgentInputModel
+{
+    [JsonPropertyName("source")]
+    public string Source { get; set; } = string.Empty;
+
+    [JsonPropertyName("format")]
+    public string Format { get; set; } = string.Empty;
+
+    [JsonPropertyName("maxTurns")]
+    public int MaxTurns { get; set; }
 }
 
 /// <summary>

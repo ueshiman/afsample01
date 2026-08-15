@@ -61,32 +61,60 @@ namespace Tutorial01B.DataAccess.Models
                     .. agentServiceDefinition.Agents.Select(a => new AgentGroupModel()
                     {
                         Id = a.Id,
-                        Source = a.Source,
-                        PlainText = a.PlainText,
+                        Input = new AgentInputModel
+                        {
+                            Source = a.Input.Source,
+                            Format = a.Input.Format,
+                            MaxTurns = a.Input.MaxTurns,
+                        },
                         AgentGroup =
                         [
-                            .. a.AgentGroup.Select(ag => new AgentModel
-                            {
-                                Id = ag.Id,
-                                Name = ag.Name,
-                                Enabled = ag.Enabled,
-                                Type = ag.Type,
-                                ProviderRef = ag.ProviderRef,
-                                Deployment = ag.Deployment,
-                                CallbackRef = ag.CallbackRef,
-                                Priority = ag.Priority,
-                                TimeoutSeconds = ag.TimeoutSeconds,
-                                Prompt = new PromptModel
-                                {
-                                    System = ag.Prompt.System,
-                                },
-                                ChatClient = CreateChatClient(ag.Deployment, ag.ProviderRef, agentServiceDefinition.Providers, out ApiKeyCredential credential),
-                                Credential = credential
-                            })
+                            .. a.AgentGroup.Select(ag => MapAgent(ag, agentServiceDefinition.Providers))
+                        ],
+                        Coordinators =
+                        [
+                            .. a.Coordinators.Select(c => MapAgent(c, agentServiceDefinition.Providers))
+                        ],
+                        SummaryGroup =
+                        [
+                            .. a.SummaryGroup.Select(s => MapAgent(s, agentServiceDefinition.Providers))
                         ]
 
                     })
                 ],
+            };
+        }
+
+        private AgentModel MapAgent(AgentDefinition definition, List<ProviderDefinition> providerDefinitions)
+        {
+            return new AgentModel
+            {
+                Id = definition.Id,
+                Name = definition.Name,
+                Enabled = definition.Enabled,
+                Type = definition.Type,
+                ProviderRef = definition.ProviderRef,
+                Deployment = definition.Deployment,
+                CallbackRef = definition.CallbackRef,
+                Priority = definition.Priority,
+                TimeoutSeconds = definition.TimeoutSeconds,
+                Prompt = new PromptModel
+                {
+                    System = definition.Prompt.System,
+                },
+                Input = new InputModel
+                {
+                    Source = definition.Input.Source,
+                    Format = definition.Input.Format,
+                    MaxTurns = definition.Input.MaxTurns,
+                },
+                Settings = new AgentSettingsModel
+                {
+                    Temperature = definition.Settings.Temperature,
+                    MaxOutputTokens = definition.Settings.MaxOutputTokens,
+                },
+                ChatClient = CreateChatClient(definition.Deployment, definition.ProviderRef, providerDefinitions, out ApiKeyCredential credential),
+                Credential = credential
             };
         }
 

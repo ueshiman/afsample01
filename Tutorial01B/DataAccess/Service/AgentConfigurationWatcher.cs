@@ -72,7 +72,7 @@ public sealed class AgentConfigurationWatcher : IDisposable, IAgentConfiguration
     {
         try
         {
-            AgentConfigurationSnapshot snapshot = _loader.Load(_file.Directory);
+            AgentConfigurationSnapshot snapshot = _loader.Load(_file.Path);
             _store.Set(snapshot);
 
             _logger.LogInformation("設定ファイルを再読み込みしました: {File.Path}", _file.Path);
