@@ -46,26 +46,32 @@ public static class AgentConfigurationValidator
         foreach (var agent in definition.Agents)
         {
             ValidateRequired(agent.Id, "agents[].id");
-            
-            //ValidateRequired(agent.Name, $"agents[{agent.Id}].name");
-            //ValidateRequired(agent.Type, $"agents[{agent.Id}].type");
-            //ValidateRequired(agent.ProviderRef, $"agents[{agent.Id}].providerRef");
-            //ValidateRequired(agent.Deployment, $"agents[{agent.Id}].deployment");
-            //ValidateRequired(agent.CallbackRef, $"agents[{agent.Id}].callbackRef");
-            //ValidateRequired(agent.Prompt.System, $"agents[{agent.Id}].prompt.system");
+            ValidateRequired(agent.Input.Source, $"agents[{agent.Id}].input.source");
+            ValidateRequired(agent.Input.Format, $"agents[{agent.Id}].input.format");
 
-            //if (!providerIds.Contains(agent.PlainText))
-            //{
-            //    throw new InvalidOperationException(
-            //        $"agents[{agent.Id}].PlainText '{agent.PlainText}' に対応する PlainText が存在しません。");
-            //}
+            if (agent.Input.MaxTurns <= 0)
+            {
+                throw new InvalidOperationException($"agents[{agent.Id}].input.maxTurns は 1 以上である必要があります。");
+            }
 
-            //if (!callbackIds.Contains(agent.Source))
-            //{
-            //    throw new InvalidOperationException(
-            //        $"agents[{agent.Id}].Source '{agent.Source}' に対応する callback が存在しません。");
-            //}
+            ValidateUniqueIds(agent.AgentGroup.Select(x => x.Id), $"agents[{agent.Id}].agentsGroup[].id");
+            ValidateUniqueIds(agent.Coordinators.Select(x => x.Id), $"agents[{agent.Id}].coordinators[].id");
+            ValidateUniqueIds(agent.SummaryGroup.Select(x => x.Id), $"agents[{agent.Id}].summaryGroup[].id");
 
+            foreach (var member in agent.AgentGroup)
+            {
+                ValidateAgentDefinition(member, $"agents[{agent.Id}].agentsGroup", providerIds, callbackIds);
+            }
+
+            foreach (var coordinator in agent.Coordinators)
+            {
+                ValidateAgentDefinition(coordinator, $"agents[{agent.Id}].coordinators", providerIds, callbackIds);
+            }
+
+            foreach (var summary in agent.SummaryGroup)
+            {
+                ValidateAgentDefinition(summary, $"agents[{agent.Id}].summaryGroup", providerIds, callbackIds);
+            }
         }
 
         if (definition.Service.DefaultTimeoutSeconds <= 0)
@@ -77,6 +83,32 @@ public static class AgentConfigurationValidator
         {
             throw new InvalidOperationException("execution.maxDegreeOfParallelism は 1 以上である必要があります。");
         }
+    }
+
+    private static void ValidateAgentDefinition(AgentDefinition agent, string pathPrefix, HashSet<string> providerIds, HashSet<string> callbackIds)
+    {
+        ValidateRequired(agent.Id, $"{pathPrefix}[].id");
+        ValidateRequired(agent.Name, $"{pathPrefix}[{agent.Id}].name");
+        ValidateRequired(agent.Type, $"{pathPrefix}[{agent.Id}].type");
+        ValidateRequired(agent.ProviderRef, $"{pathPrefix}[{agent.Id}].providerRef");
+        ValidateRequired(agent.Deployment, $"{pathPrefix}[{agent.Id}].deployment");
+
+        if (!string.IsNullOrWhiteSpace(agent.CallbackRef))
+        {
+            if (!callbackIds.Contains(agent.CallbackRef))
+            {
+                throw new InvalidOperationException(
+                    $"{pathPrefix}[{agent.Id}].callbackRef '{agent.CallbackRef}' に対応する callback が存在しません。");
+            }
+        }
+
+        if (!providerIds.Contains(agent.ProviderRef))
+        {
+            throw new InvalidOperationException(
+                $"{pathPrefix}[{agent.Id}].providerRef '{agent.ProviderRef}' に対応する provider が存在しません。");
+        }
+
+        ValidateRequired(agent.Prompt.System, $"{pathPrefix}[{agent.Id}].prompt.system");
     }
 
     private static void ValidateRequired(string? value, string path)
