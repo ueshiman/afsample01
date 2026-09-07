@@ -20,8 +20,14 @@ var config = new ConfigurationBuilder()
 
 var showInputLogs = config.GetValue("Client:ShowInputLogs", true);
 
+var callbackUrl = config.GetValue<string>("Client:CallbackUrl");
+if (string.IsNullOrWhiteSpace(callbackUrl))
+{
+    callbackUrl = options.CallbackUrl;
+}
+
 // 第1引数に入力ファイルパス、未指定時は既定値を使用
-var inputFilePath = args.Length > 0 ? args[0] : "inputs.txt";
+var inputFilePath = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "inputs.txt");
 
 // 入力ファイル存在チェック
 if (!File.Exists(inputFilePath))
@@ -52,8 +58,8 @@ Console.CancelKeyPress += (_, e) =>
 
 // 送信処理、コールバック受信サーバー、表示ループを並列起動
 var bus = new MessageBus();
-var callbackServerTask = RunCallbackServerAsync(options.CallbackUrl, bus, cts.Token);
-var senderTask = SendInputsAsync(lines, options, bus, cts.Token);
+var callbackServerTask = RunCallbackServerAsync(callbackUrl, bus, cts.Token);
+var senderTask = SendInputsAsync(lines, options, callbackUrl, bus, cts.Token);
 var rendererTask = RenderLoopAsync(bus, showInputLogs, cts.Token);
 
 // 送信完了後、コールバック受信待ちの猶予を確保してから終了
@@ -70,12 +76,14 @@ catch (OperationCanceledException) when (cts.IsCancellationRequested)
 {
     // 正常なキャンセル終了として扱う
 }
-
+Console.WriteLine("Hit any Key to exit...");
+Console.Read();
 return;
 
 static async Task SendInputsAsync(
     string[] lines,
     ClientOptions options,
+    string callbackUrl,
     MessageBus bus,
     CancellationToken cancellationToken)
 {
@@ -94,7 +102,7 @@ static async Task SendInputsAsync(
         var request = new ExecuteOrchestratorRequest(
             line,
             sessionId,
-            options.CallbackUrl,
+            callbackUrl,
             requestId);
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/orchestrator/execute")
@@ -201,7 +209,7 @@ static async Task RenderLoopAsync(MessageBus bus, bool showInputLogs, Cancellati
         {
             try
             {
-                await Task.Delay(100, cancellationToken);
+                await Task.Delay(20, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -209,6 +217,7 @@ static async Task RenderLoopAsync(MessageBus bus, bool showInputLogs, Cancellati
             }
         }
     }
+    Console.WriteLine("Render loop exiting...");
 }
 
 // callback本文のURLエンコードを必要時のみデコード

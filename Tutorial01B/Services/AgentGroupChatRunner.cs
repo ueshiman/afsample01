@@ -168,6 +168,7 @@ namespace Tutorial01B.Services
 
                             // 元の会話
                             .. GetRecentHistory(sourceHistory, maxTurns),
+                            .. GetRecentHistory(sourceHistory, maxTurns),
 
                             // Agent が生成した提示候補だけ
                             .. resultSummary

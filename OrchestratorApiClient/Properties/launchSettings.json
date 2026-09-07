@@ -2,6 +2,7 @@
   "profiles": {
     "OrchestratorApiClient": {
       "commandName": "Project",
+      "commandLineArgs": "\"C:\\github\\ueshiman\\afsample01\\afsample01\\OrchestratorApiClient\\inputs01.txt\"",
       "launchBrowser": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
