@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.Collections.Concurrent;
+using System.Text.Json;
 using ConversationSuggestionService.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
@@ -33,34 +34,76 @@ public class AgentOrchestrator : IAgentOrchestrator
         //_settingsFilePath = Path.Combine(environment.ContentRootPath, "agentsettings.json");
     }
 
-    public Task<Guid> ExecuteAsync(Uri callback, string input, Guid? sessionId, CancellationToken cancellationToken = default)
+    public Task<Guid> ExecuteAsync(Uri callback, string requestId, string input, Guid? sessionId, CancellationToken cancellationToken = default)
     {
-        return HandleAsync(callback, input, sessionId, cancellationToken);
+        return HandleAsync(callback, requestId, input, sessionId, cancellationToken);
     }
 
-    public async Task<Guid> HandleAsync(Uri callback, string message, Guid? sessionId, CancellationToken cancellationToken = default)
+    public async Task<Guid> HandleAsync(Uri callback, string requestId, string message, Guid? sessionId, CancellationToken cancellationToken = default)
     {
         //AgentConfigurationSnapshot snapshot = _configurationStore.Current;
         AgentEntity entity = _agentStore.GetAgent(sessionId);
         var mode = entity.ServiceModel.Execution.Mode;
         entity.ChatMessages.Add(new UserChatMessage(message));
 
+        _logger.LogInformation(
+            "orchestrator request received. requestId={RequestId}, sessionId={SessionId}, callback={Callback}, input={Input}",
+            requestId,
+            entity.Id,
+            callback,
+            message);
+
         foreach (AgentGroupModel agentGroup in entity.ServiceModel.Agents)
         {
+            AgentGroupChatResult result;
+            string? error = null;
+
             try
             {
-                var result = await _agentGroupChatRunner.RunAsync(agentGroup, entity.ChatMessages, 5, 10, cancellationToken);
-                //entity.ChatMessages.Add(result.Results.ToString());
-                // resultをUriへpostで送信する
-                using var response = await _httpClient.PostAsJsonAsync(callback, new { SessionId = entity.Id, Result = result }, cancellationToken);
+                result = await _agentGroupChatRunner.RunAsync(agentGroup, entity.ChatMessages, 5, 10, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "エージェント '{AgentGroupId}' の実行中にエラーが発生しました。", agentGroup.Id);
+                result = new AgentGroupChatResult(agentGroup.Id, []);
+                error = exception.Message;
+            }
+
+            try
+            {
+                var callbackPayload = new
+                {
+                    RequestId = requestId,
+                    SessionId = entity.Id,
+                    Result = result,
+                    Error = error
+                };
+
+                _logger.LogInformation(
+                    "sending callback. requestId={RequestId}, payload={Payload}",
+                    requestId,
+                    JsonSerializer.Serialize(callbackPayload));
+
+                using var response = await _httpClient.PostAsJsonAsync(
+                    callback,
+                    callbackPayload,
+                    cancellationToken);
 
                 response.EnsureSuccessStatusCode();
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e, "エージェント '{AgentGroupId}' の実行中にエラーが発生しました。", agentGroup.Id);
-            }
 
+                _logger.LogInformation(
+                    "callback completed. requestId={RequestId}, statusCode={StatusCode}",
+                    requestId,
+                    (int)response.StatusCode);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(
+                    exception,
+                    "callback の送信に失敗しました。requestId={RequestId}, agentGroupId={AgentGroupId}",
+                    requestId,
+                    agentGroup.Id);
+            }
         }
 
         return entity.Id;
@@ -141,4 +184,3 @@ public class AgentOrchestrator : IAgentOrchestrator
     //        : configuredEndpoint;
     //}
 }
-

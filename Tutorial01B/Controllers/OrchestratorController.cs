@@ -66,7 +66,12 @@ public sealed class OrchestratorController : ControllerBase
     {
         try
         {
-            var result = await _orchestrator.ExecuteAsync(new System.Uri(request.CallbackUrl), request.Input, request.SessionId, CancellationToken.None);
+            var result = await _orchestrator.ExecuteAsync(
+                new System.Uri(request.CallbackUrl),
+                request.RequestId,
+                request.Input,
+                request.SessionId,
+                CancellationToken.None);
 
             //var payload = new ExecuteCallbackPayload
             //{

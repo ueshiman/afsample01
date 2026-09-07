@@ -21,7 +21,12 @@ public sealed class MultiAgentChatService : IChatService
 
         _logger.LogInformation("Running MultiAgentChatService with message: {Message}", userMessage);
 
-        var results = await _orchestrator.HandleAsync(new Uri("https://sample.com"), userMessage, Guid.NewGuid(), cancellationToken);
+        var results = await _orchestrator.HandleAsync(
+            new Uri("https://sample.com"),
+            Guid.NewGuid().ToString(),
+            userMessage,
+            Guid.NewGuid(),
+            cancellationToken);
 
             Console.WriteLine($"=== {results} ===");
             Console.WriteLine(userMessage);

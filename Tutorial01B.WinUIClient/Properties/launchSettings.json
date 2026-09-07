@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Tutorial01B.WinUIClient (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Tutorial01B.WinUIClient (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
