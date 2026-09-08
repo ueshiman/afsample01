@@ -6,9 +6,11 @@
   <Project Path="OrchestratorApiClient/OrchestratorApiClient.csproj" />
   <Project Path="Receiver/Receiver.csproj" Id="9db63b04-235d-40f6-906e-d1cb88a7d4f2" />
   <Project Path="Tests/Tutorial01B.Tests/Tutorial01B.Tests.csproj" />
+  <Project Path="Tests/Tutorial02.Tests/Tutorial02.Tests.csproj" />
   <Project Path="Tutorial01B.WinUIClient/Tutorial01B.WinUIClient.csproj" />
   <Project Path="Tutorial01/Tutorial01.csproj" Id="92555176-9cd8-4a14-8f65-7d46f69214c0">
     <Build Solution="Debug|*" Project="false" />
   </Project>
   <Project Path="Tutorial01B/Tutorial01B.csproj" Id="23f08864-27d7-49cb-b156-99a514c85655" />
+  <Project Path="Tutorial02/Tutorial02.csproj" />
 </Solution>

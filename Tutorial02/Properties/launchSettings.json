@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Tutorial02": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:12769;http://localhost:12770"
+    }
+  }
+}
